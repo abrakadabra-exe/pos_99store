@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/users.js";
 import productRoutes from "./routes/products.js";
+import saleRoutes from "./routes/sales.js";
 import { backupInfo } from "./backup.js";
 import { requireAuth } from "./auth.js";
 
@@ -21,6 +22,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/sales", saleRoutes);
 
 app.get("/api/backup/info", requireAuth, (req, res) => {
   res.json(backupInfo());

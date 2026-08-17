@@ -5,6 +5,8 @@ import Setup from "./pages/Setup.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Products from "./pages/Products.jsx";
+import Pos from "./pages/Pos.jsx";
+import Sales from "./pages/Sales.jsx";
 
 function Protected() {
   const { user, loading } = useAuth();
@@ -27,6 +29,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route element={<Protected />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/pos" element={<Pos />} />
+          <Route path="/sales" element={<Sales />} />
           <Route path="/products" element={<Products />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

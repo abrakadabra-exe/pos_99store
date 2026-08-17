@@ -43,7 +43,8 @@ const MIGRATIONS = [
 
       CREATE TABLE IF NOT EXISTS sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        invoice_no TEXT NOT NULL UNIQUE,
+        invoice_day TEXT NOT NULL DEFAULT (date('now')),
+        invoice_no TEXT NOT NULL,
         subtotal REAL NOT NULL DEFAULT 0,
         discount REAL NOT NULL DEFAULT 0,
         total REAL NOT NULL DEFAULT 0,
@@ -52,9 +53,11 @@ const MIGRATIONS = [
         cash_received REAL NOT NULL DEFAULT 0,
         change_given REAL NOT NULL DEFAULT 0,
         user_id INTEGER REFERENCES users(id),
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (invoice_day, invoice_no)
       );
       CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
+      CREATE INDEX IF NOT EXISTS idx_sales_day ON sales(invoice_day);
 
       CREATE TABLE IF NOT EXISTS sale_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,6 +95,29 @@ const MIGRATIONS = [
         payload TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+    `,
+  },
+  {
+    version: 2,
+    sql: `
+      DROP TABLE IF EXISTS sales;
+      CREATE TABLE sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_day TEXT NOT NULL DEFAULT (date('now')),
+        invoice_no TEXT NOT NULL,
+        subtotal REAL NOT NULL DEFAULT 0,
+        discount REAL NOT NULL DEFAULT 0,
+        total REAL NOT NULL DEFAULT 0,
+        payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','bkash','nagad')),
+        payment_ref TEXT NOT NULL DEFAULT '',
+        cash_received REAL NOT NULL DEFAULT 0,
+        change_given REAL NOT NULL DEFAULT 0,
+        user_id INTEGER REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (invoice_day, invoice_no)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
+      CREATE INDEX IF NOT EXISTS idx_sales_day ON sales(invoice_day);
     `,
   },
 ];

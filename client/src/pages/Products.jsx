@@ -178,7 +178,9 @@ function History({ product }) {
             <tr key={m.id} className="border-b border-slate-100">
               <td className="py-2 text-slate-500">{m.created_at}</td>
               <td className="py-2">{m.type}</td>
-              <td className="py-2 font-medium">+{m.qty}</td>
+              <td className={`py-2 font-medium ${m.qty < 0 ? "text-red-600" : "text-slate-800"}`}>
+                {m.qty > 0 ? `+${m.qty}` : m.qty}
+              </td>
               <td className="py-2 text-slate-500">{m.note}</td>
             </tr>
           ))}

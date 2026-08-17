@@ -3,7 +3,8 @@ import { useAuth } from "../auth.jsx";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: "▦" },
-  { to: "/pos", label: "POS (coming soon)", icon: "🛒", disabled: true },
+  { to: "/pos", label: "POS", icon: "🛒" },
+  { to: "/sales", label: "Sales", icon: "🧾" },
   { to: "/products", label: "Products", icon: "🏷️" },
   { to: "/reports", label: "Reports (coming soon)", icon: "📊", disabled: true },
   { to: "/users", label: "Users (coming soon)", icon: "👥", disabled: true },
