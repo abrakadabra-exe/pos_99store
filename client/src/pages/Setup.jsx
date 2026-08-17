@@ -52,9 +52,9 @@ export default function Setup() {
 
   if (done) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-100 p-4">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
-          <h1 className="text-xl font-bold text-slate-800">Admin account created</h1>
+<div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
+        <h1 className="text-xl font-bold text-slate-800">Admin account created</h1>
           <p className="mt-2 text-sm text-slate-600">
             Store this <strong>one-time emergency recovery code</strong> somewhere safe, offline.
             It is the only way to regain admin access if the admin PIN is ever lost.
@@ -72,6 +72,7 @@ export default function Setup() {
             I have stored it — go to login
           </button>
         </div>
+        <p className="mt-4 text-center text-[10px] text-slate-400">Developed by Megamind Bangladesh</p>
       </div>
     );
   }
@@ -80,7 +81,7 @@ export default function Setup() {
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500";
 
   return (
-    <div className="min-h-screen grid place-items-center bg-slate-100 p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
       <form onSubmit={submit} className="w-full max-w-md bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-xl font-bold text-slate-800">First-time setup</h1>
         <p className="mt-1 text-sm text-slate-600">
@@ -144,6 +145,7 @@ export default function Setup() {
           </button>
         </div>
       </form>
+      <p className="mt-4 text-center text-[10px] text-slate-400">Developed by Megamind Bangladesh</p>
     </div>
   );
 }

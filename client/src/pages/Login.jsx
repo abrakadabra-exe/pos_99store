@@ -54,7 +54,7 @@ export default function Login() {
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500";
 
   return (
-    <div className="min-h-screen grid place-items-center bg-slate-100 p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
       <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6">
         <div className="text-center">
           <div className="text-2xl font-extrabold text-emerald-700">99tk POS</div>
@@ -99,6 +99,7 @@ export default function Login() {
           </p>
         )}
       </form>
+      <p className="mt-4 text-center text-[10px] text-slate-400">Developed by Megamind Bangladesh</p>
     </div>
   );
 }

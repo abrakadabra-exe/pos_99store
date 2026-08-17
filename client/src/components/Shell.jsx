@@ -100,8 +100,13 @@ export default function Shell() {
         {sidebar}
       </aside>
 
-      <main className="flex-1 min-w-0">
-        <Outlet />
+      <main className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1">
+          <Outlet />
+        </div>
+        <footer className="px-4 sm:px-6 pb-4 pt-6 text-center text-[10px] text-slate-400">
+          Developed by Megamind Bangladesh
+        </footer>
       </main>
     </div>
   );
