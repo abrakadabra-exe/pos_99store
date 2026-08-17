@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
-
-const taka = (n) => "৳" + Number(n).toFixed(2);
+import { taka, localDateTime } from "../format.js";
 
 function Modal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-xl bg-white shadow-xl p-5"
+        className="w-full max-w-lg rounded-xl bg-white shadow-xl p-5 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -162,45 +161,60 @@ function History({ product }) {
 
   return (
     <div className="text-sm">
-      <table className="w-full">
-        <thead>
-          <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-            <th className="py-2">When</th>
-            <th>Type</th>
-            <th>Qty</th>
-            <th>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {!moves && <tr><td colSpan="4" className="py-3 text-slate-400">Loading…</td></tr>}
-          {moves?.length === 0 && <tr><td colSpan="4" className="py-3 text-slate-400">No stock movements yet</td></tr>}
-          {moves?.map((m) => (
-            <tr key={m.id} className="border-b border-slate-100">
-              <td className="py-2 text-slate-500">{m.created_at}</td>
-              <td className="py-2">{m.type}</td>
-              <td className={`py-2 font-medium ${m.qty < 0 ? "text-red-600" : "text-slate-800"}`}>
-                {m.qty > 0 ? `+${m.qty}` : m.qty}
-              </td>
-              <td className="py-2 text-slate-500">{m.note}</td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px]">
+          <thead>
+            <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
+              <th className="py-2">When</th>
+              <th>Type</th>
+              <th>Qty</th>
+              <th>Note</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {!moves && <tr><td colSpan="4" className="py-3 text-slate-400">Loading…</td></tr>}
+            {moves?.length === 0 && <tr><td colSpan="4" className="py-3 text-slate-400">No stock movements yet</td></tr>}
+            {moves?.map((m) => (
+              <tr key={m.id} className="border-b border-slate-100">
+                <td className="py-2 text-slate-500 whitespace-nowrap">{localDateTime(m.created_at)}</td>
+                <td className="py-2">{m.type}</td>
+                <td className={`py-2 font-medium ${m.qty < 0 ? "text-red-600" : "text-slate-800"}`}>
+                  {m.qty > 0 ? `+${m.qty}` : m.qty}
+                </td>
+                <td className="py-2 text-slate-500">{m.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 function ImportCsv({ onDone, onError }) {
   const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState(null);
+  const [fileError, setFileError] = useState("");
   const fileRef = useRef(null);
 
   async function submit(e) {
     e.preventDefault();
-    const file = fileRef.current?.files?.[0];
     if (!file) return;
     setBusy(true);
     try {
-      const data = await api("/products/import", { method: "POST", body: { csv: await file.text() } });
+      let body;
+      if (/\.(xlsx|xls)$/i.test(file.name)) {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = () => reject(new Error("Could not read the file"));
+          r.readAsDataURL(file);
+        });
+        body = { name: file.name, data: dataUrl.slice(dataUrl.indexOf(",") + 1) };
+      } else {
+        body = { csv: await file.text() };
+      }
+      const data = await api("/products/import", { method: "POST", body });
       onDone(data);
     } catch (err) {
       onError(err.message);
@@ -209,41 +223,81 @@ function ImportCsv({ onDone, onError }) {
     }
   }
 
+  function pick(picked) {
+    setFileError("");
+    if (!picked) return;
+    if (!/\.(csv|xlsx|xls)$/i.test(picked.name)) {
+      setFileError("That doesn't look like a CSV or Excel file");
+      setFile(null);
+      return;
+    }
+    if (picked.size > 8 * 1024 * 1024) {
+      setFileError("File is too large (max 8 MB)");
+      setFile(null);
+      return;
+    }
+    setFile(picked);
+  }
+
   return (
     <form onSubmit={submit} className="space-y-4 text-sm">
       <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
-        <div className="text-xs font-bold text-slate-700 mb-2">CSV format — your file must have exactly these columns:</div>
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-left text-emerald-700">
-              {["barcode", "name_en", "category", "cost_price", "sale_price", "stock", "low_stock_threshold"].map((c) => (
-                <th key={c} className="px-1 py-1 border border-emerald-200 bg-emerald-50 font-mono">{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              {["6933046200012", "Shampoo Sachet 20ml", "Personal Care", "9", "99", "200", "50"].map((c, i) => (
-                <td key={i} className="px-1 py-1 border border-slate-200 text-slate-600">{c}</td>
-              ))}
-            </tr>
-            <tr>
-              {["", "Biscuit Khaja 100g", "Snacks", "40", "99", "300", "60"].map((c, i) => (
-                <td key={i} className="px-1 py-1 border border-slate-200 text-slate-600">{c || "—"}</td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
+        <div className="text-xs font-bold text-slate-700 mb-2">
+          CSV or Excel format — your file must have exactly these columns:
+        </div>
+        <div className="overflow-x-auto">
+          <table className="text-xs min-w-[460px]">
+            <thead>
+              <tr className="text-left text-emerald-700">
+                {["barcode", "name_en", "category", "cost_price", "sale_price", "stock", "low_stock_threshold"].map((c) => (
+                  <th key={c} className="px-1 py-1 border border-emerald-200 bg-emerald-50 font-mono whitespace-nowrap">{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {["6933046200012", "Shampoo Sachet 20ml", "Personal Care", "9", "99", "200", "50"].map((c, i) => (
+                  <td key={i} className="px-1 py-1 border border-slate-200 text-slate-600 whitespace-nowrap">{c}</td>
+                ))}
+              </tr>
+              <tr>
+                {["", "Biscuit Khaja 100g", "Snacks", "40", "99", "300", "60"].map((c, i) => (
+                  <td key={i} className="px-1 py-1 border border-slate-200 text-slate-600 whitespace-nowrap">{c || "—"}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <ul className="mt-3 space-y-1 text-xs text-slate-500">
           <li>• Empty <span className="font-mono">barcode</span> → a barcode is auto-generated.</li>
           <li>• Existing barcode → row updates that product; its <span className="font-mono">stock</span> column is <b>added</b> to current stock.</li>
           <li>• New barcode → product created with that opening stock.</li>
           <li>• Wrong columns or any invalid row → the whole file is rejected.</li>
+          <li>• Excel: only the first sheet is read, first row must be the column names.</li>
         </ul>
       </div>
-      <input ref={fileRef} type="file" accept=".csv,text/csv" required className="text-sm" />
+
+      <div className="flex items-center gap-3">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,.xlsx,.xls"
+          required
+          className="sr-only"
+          onChange={(e) => pick(e.target.files?.[0])}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Choose file…
+        </button>
+        <span className="truncate text-sm text-slate-600">{file ? file.name : "No file chosen"}</span>
+      </div>
+      {fileError && <p className="text-sm text-red-600">{fileError}</p>}
       <div className="flex justify-end pt-1">
-        <button type="submit" disabled={busy} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}>
+        <button type="submit" disabled={busy || !file} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}>
           {busy ? "Importing…" : "Import file"}
         </button>
       </div>
@@ -290,8 +344,8 @@ export default function Products() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Products</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -300,7 +354,7 @@ export default function Products() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => setModal("import")} className={`${btn} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`}>
-            Import CSV
+            Import CSV / Excel
           </button>
           <button onClick={() => setModal("add")} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}>
             + Add product
@@ -314,9 +368,9 @@ export default function Products() {
         </div>
       )}
 
-      <div className="mt-5 flex items-center gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <input
-          className={`${field} max-w-xs`}
+          className={`${field} w-full sm:w-auto sm:max-w-xs`}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search name, barcode, category…"
@@ -327,8 +381,8 @@ export default function Products() {
         </label>
       </div>
 
-      <div className="mt-4 rounded-xl bg-white shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="mt-4 rounded-xl bg-white shadow-sm overflow-x-auto">
+        <table className="w-full text-sm min-w-[680px]">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
               <th className="px-4 py-3">Barcode</th>
@@ -388,7 +442,7 @@ export default function Products() {
         </Modal>
       )}
       {modal === "import" && (
-        <Modal title="Import products from CSV" onClose={() => setModal(null)}>
+        <Modal title="Import products from CSV or Excel" onClose={() => setModal(null)}>
           <ImportCsv
             onDone={(r) => { setModal(null); notify("success", `Imported ${r.imported} rows (${r.created} created, ${r.updated} updated)`); load(); }}
             onError={(m) => notify("error", m)}

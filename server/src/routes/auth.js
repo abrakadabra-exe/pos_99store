@@ -38,6 +38,7 @@ router.post("/setup", (req, res) => {
   }
 
   const recoveryCode = generateRecoveryCode();
+  const storeName = String(req.body.store_name || "").trim().slice(0, 60);
   const run = db.transaction(() => {
     db.prepare("INSERT INTO users (username, pin_hash, role, name) VALUES (?, ?, 'admin', ?)").run(
       username,
@@ -46,6 +47,7 @@ router.post("/setup", (req, res) => {
     );
     setSetting("admin_recovery_hash", hashPin(recoveryCode));
     setSetting("setup_done_at", new Date().toISOString());
+    if (storeName) setSetting("store_name", storeName);
   });
   run();
 

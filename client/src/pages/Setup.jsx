@@ -5,7 +5,7 @@ import { api } from "../api.js";
 export default function Setup() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ username: "", name: "", pin: "", confirmPin: "" });
+  const [form, setForm] = useState({ username: "", name: "", storeName: "", pin: "", confirmPin: "" });
   const [error, setError] = useState("");
   const [done, setDone] = useState(null);
 
@@ -32,6 +32,7 @@ export default function Setup() {
         body: {
           username: form.username,
           name: form.name,
+          store_name: form.storeName,
           pin: form.pin,
         },
       });
@@ -104,6 +105,15 @@ export default function Setup() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Shop Owner"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Store name (optional)</label>
+            <input
+              className={field}
+              value={form.storeName}
+              onChange={(e) => setForm({ ...form, storeName: e.target.value })}
+              placeholder="e.g. 99tk Store"
             />
           </div>
           <div>

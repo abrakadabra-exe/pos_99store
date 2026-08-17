@@ -1,4 +1,5 @@
 import { Router } from "express";
+import * as XLSX from "xlsx";
 import db from "../db.js";
 import { requireAuth } from "../auth.js";
 import { logWrite } from "../backup.js";
@@ -262,84 +263,124 @@ router.post("/:id/stock-in", (req, res, next) => {
   }
 });
 
+function cellToText(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number") {
+    if (Number.isInteger(v) && Math.abs(v) < 1e15) return String(v);
+    return v.toLocaleString("fullwide", { useGrouping: false });
+  }
+  return String(v).trim();
+}
+
+function applyImport(header, rows, userId) {
+  const missing = REQUIRED_COLUMNS.filter((c) => !header.includes(c));
+  const extra = header.filter((c) => !REQUIRED_COLUMNS.includes(c));
+  if (missing.length || extra.length) {
+    return {
+      error: `Invalid columns. Missing: ${missing.join(", ") || "none"}. Unexpected: ${extra.join(", ") || "none"}. Required: ${REQUIRED_COLUMNS.join(", ")}`,
+    };
+  }
+  const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+
+  const errors = [];
+  const parsed = rows.map((r, i) => {
+    const rowNo = i + 2;
+    const get = (col) => cellToText(r[idx[col]] ?? "");
+    const name = get("name_en");
+    const sale = asNum(get("sale_price"), "sale_price", errors, rowNo);
+    const cost = asNum(get("cost_price"), "cost_price", errors, rowNo);
+    const stock = asNum(get("stock"), "stock", errors, rowNo);
+    const threshold = asNum(get("low_stock_threshold"), "low_stock_threshold", errors, rowNo);
+    const cat = get("category");
+    const barcode = get("barcode");
+    if (!name) errors.push(`Row ${rowNo}: name_en is required`);
+    if (cat.length > 100) errors.push(`Row ${rowNo}: category too long`);
+    if (barcode.length > 32) errors.push(`Row ${rowNo}: barcode too long`);
+    return { rowNo, barcode, name, cat, cost, sale, stock, threshold };
+  });
+
+  if (errors.length) {
+    return {
+      error: `Import rejected (${errors.length} problem${errors.length > 1 ? "s" : ""}): ${errors.slice(0, 10).join("; ")}`,
+    };
+  }
+
+  const byBarcode = db.prepare("SELECT id FROM products WHERE barcode = ?");
+  const run = db.transaction(() => {
+    let created = 0;
+    let updated = 0;
+    for (const row of parsed) {
+      const existing = row.barcode ? byBarcode.get(row.barcode) : null;
+      if (existing) {
+        db.prepare(
+          `UPDATE products SET name_en = ?, category = ?, cost_price = ?, sale_price = ?, low_stock_threshold = ?, stock = stock + ?, updated_at = datetime('now') WHERE id = ?`
+        ).run(row.name, row.cat, row.cost, row.sale, row.threshold, row.stock, existing.id);
+        if (row.stock > 0) {
+          db.prepare(
+            "INSERT INTO stock_moves (product_id, qty, type, ref, note, user_id) VALUES (?, ?, 'purchase', ?, 'Import', ?)"
+          ).run(existing.id, row.stock, `import:${Date.now()}`, userId);
+        }
+        updated++;
+      } else {
+        const info = db
+          .prepare(
+            `INSERT INTO products (barcode, name_en, category, cost_price, sale_price, stock, low_stock_threshold)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(row.barcode || null, row.name, row.cat, row.cost, row.sale, row.stock, row.threshold);
+        const id = info.lastInsertRowid;
+        if (!row.barcode) {
+          db.prepare("UPDATE products SET barcode = ? WHERE id = ?").run(ean13FromId(id), id);
+        }
+        if (row.stock > 0) {
+          db.prepare(
+            "INSERT INTO stock_moves (product_id, qty, type, ref, note, user_id) VALUES (?, ?, 'opening', ?, 'Import', ?)"
+          ).run(id, row.stock, `import:${Date.now()}`, userId);
+        }
+        created++;
+      }
+    }
+    return { created, updated };
+  });
+  const counts = run();
+  logWrite("product", "import", null, { counts, rows: parsed.length });
+  return { imported: parsed.length, created: counts.created, updated: counts.updated };
+}
+
+function excelRows(wb) {
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+  return rows.filter((r, i) => i > 0 && r.some((c) => cellToText(c) !== ""));
+}
+
 router.post("/import", (req, res, next) => {
   try {
+    const name = String(req.body.name || "").trim();
+    if (/\.(xlsx|xls)$/i.test(name)) {
+      const data = String(req.body.data || "");
+      if (!data) return res.status(400).json({ error: "Empty Excel file" });
+      const wb = XLSX.read(data, { type: "base64" });
+      if (!wb.SheetNames.length) return res.status(400).json({ error: "Excel file has no sheets" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const all = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      if (all.length < 2) {
+        return res.status(400).json({ error: "File needs a header row and at least one data row" });
+      }
+      const header = all[0].map((h) => cellToText(h));
+      const result = applyImport(header, excelRows(wb), req.user.id);
+      if (result.error) return res.status(400).json(result);
+      return res.json(result);
+    }
+
     const text = String(req.body.csv || "").replace(/^\uFEFF/, "");
     if (!text.trim()) return res.status(400).json({ error: "Empty CSV" });
     const rows = parseCsv(text);
     if (rows.length < 2) return res.status(400).json({ error: "CSV needs a header row and at least one data row" });
 
     const header = rows[0].map((h) => h.trim());
-    const missing = REQUIRED_COLUMNS.filter((c) => !header.includes(c));
-    const extra = header.filter((c) => !REQUIRED_COLUMNS.includes(c));
-    if (missing.length || extra.length) {
-      return res.status(400).json({
-        error: `Invalid columns. Missing: ${missing.join(", ") || "none"}. Unexpected: ${extra.join(", ") || "none"}. Required: ${REQUIRED_COLUMNS.join(", ")}`,
-      });
-    }
-    const idx = Object.fromEntries(header.map((h, i) => [h, i]));
-
-    const errors = [];
-    const parsed = rows.slice(1).map((r, i) => {
-      const rowNo = i + 2;
-      const get = (col) => (r[idx[col]] ?? "").toString().trim();
-      const name = get("name_en");
-      const sale = asNum(get("sale_price"), "sale_price", errors, rowNo);
-      const cost = asNum(get("cost_price"), "cost_price", errors, rowNo);
-      const stock = asNum(get("stock"), "stock", errors, rowNo);
-      const threshold = asNum(get("low_stock_threshold"), "low_stock_threshold", errors, rowNo);
-      const cat = get("category");
-      const barcode = get("barcode");
-      if (!name) errors.push(`Row ${rowNo}: name_en is required`);
-      if (cat.length > 100) errors.push(`Row ${rowNo}: category too long`);
-      if (barcode.length > 32) errors.push(`Row ${rowNo}: barcode too long`);
-      return { rowNo, barcode, name, cat, cost, sale, stock, threshold };
-    });
-
-    if (errors.length) {
-      return res.status(400).json({ error: `Import rejected (${errors.length} problem${errors.length > 1 ? "s" : ""}): ${errors.slice(0, 10).join("; ")}` });
-    }
-
-    const byBarcode = db.prepare("SELECT id FROM products WHERE barcode = ?");
-    const run = db.transaction(() => {
-      let created = 0;
-      let updated = 0;
-      for (const row of parsed) {
-        const existing = row.barcode ? byBarcode.get(row.barcode) : null;
-        if (existing) {
-          db.prepare(
-            `UPDATE products SET name_en = ?, category = ?, cost_price = ?, sale_price = ?, low_stock_threshold = ?, stock = stock + ?, updated_at = datetime('now') WHERE id = ?`
-          ).run(row.name, row.cat, row.cost, row.sale, row.threshold, row.stock, existing.id);
-          if (row.stock > 0) {
-            db.prepare(
-              "INSERT INTO stock_moves (product_id, qty, type, ref, note, user_id) VALUES (?, ?, 'purchase', ?, 'CSV import', ?)"
-            ).run(existing.id, row.stock, `import:${Date.now()}`, req.user.id);
-          }
-          updated++;
-        } else {
-          const info = db
-            .prepare(
-              `INSERT INTO products (barcode, name_en, category, cost_price, sale_price, stock, low_stock_threshold)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`
-            )
-            .run(row.barcode || null, row.name, row.cat, row.cost, row.sale, row.stock, row.threshold);
-          const id = info.lastInsertRowid;
-          if (!row.barcode) {
-            db.prepare("UPDATE products SET barcode = ? WHERE id = ?").run(ean13FromId(id), id);
-          }
-          if (row.stock > 0) {
-            db.prepare(
-              "INSERT INTO stock_moves (product_id, qty, type, ref, note, user_id) VALUES (?, ?, 'opening', ?, 'CSV import', ?)"
-            ).run(id, row.stock, `import:${Date.now()}`, req.user.id);
-          }
-          created++;
-        }
-      }
-      return { created, updated };
-    });
-    const counts = run();
-    logWrite("product", "import", null, { counts, rows: parsed.length });
-    res.json({ imported: parsed.length, created: counts.created, updated: counts.updated });
+    const result = applyImport(header, rows.slice(1), req.user.id);
+    if (result.error) return res.status(400).json(result);
+    res.json(result);
   } catch (e) {
     next(e);
   }

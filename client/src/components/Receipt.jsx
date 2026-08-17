@@ -1,3 +1,5 @@
+import LogoCanvas from "./LogoCanvas.jsx";
+
 const W = 42;
 
 const lineClass = (line) => {
@@ -7,18 +9,18 @@ const lineClass = (line) => {
   return `${base} ${size} ${align}`;
 };
 
-export default function Receipt({ lines, storeName = "99tk Store" }) {
+export default function Receipt({ receipt }) {
+  const { logo, lines } = receipt || {};
+  if (!Array.isArray(lines)) return null;
   return (
     <div
       className="mx-auto bg-white px-4 py-4 shadow-sm border border-slate-200"
       style={{ width: "320px", minHeight: "180px" }}
     >
-      <div className="text-center font-mono text-sm font-bold tracking-wide text-slate-800">
-        {storeName}
-      </div>
+      {logo && <LogoCanvas logo={logo} width="280px" />}
       <div className="mt-2 text-slate-700">
         {lines.map((line, i) => {
-          if (line.type === "blank") return <div key={i} className="h-2" />;
+          if (line.type === "logo" || line.type === "blank") return <div key={i} className="h-2" />;
           if (line.type === "divider")
             return (
               <div key={i} className="font-mono text-[13px] text-slate-500">

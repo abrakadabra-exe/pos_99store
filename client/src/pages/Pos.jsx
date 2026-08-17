@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import Receipt from "../components/Receipt.jsx";
-
-const taka = (n) => "৳" + Number(n).toFixed(2);
+import { taka } from "../format.js";
 
 const METHOD = {
   cash: { label: "Cash", note: "Enter amount received" },
@@ -117,7 +116,7 @@ export default function Pos() {
 
   if (done) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="mx-auto max-w-md text-center">
           <div className="text-3xl font-bold text-emerald-600">Sale complete</div>
           <div className="mt-1 text-sm text-slate-500">
@@ -125,7 +124,7 @@ export default function Pos() {
             {{ cash: "Cash", bkash: "bKash", nagad: "Nagad" }[done.sale.payment_method]}
           </div>
           <div className="mt-5">
-            <Receipt lines={done.receipt} />
+            <Receipt receipt={done.receipt} />
           </div>
           <div className="mt-5 flex justify-center gap-3">
             <button
@@ -150,8 +149,8 @@ export default function Pos() {
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500";
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Point of sale</h1>
           <p className="mt-1 text-sm text-slate-500">Scan a barcode or search by name</p>

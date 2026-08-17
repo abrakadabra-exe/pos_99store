@@ -1,4 +1,7 @@
+import { getSetting } from "./db.js";
+
 const W = 42;
+const PRINTER_DOTS = 384;
 
 function padRight(text, width) {
   text = String(text);
@@ -19,12 +22,43 @@ function padCenter(text, width) {
 
 const taka = (n) => `${Number(n).toFixed(2)} Tk`;
 
+function localDateTime(utc) {
+  const d = new Date(String(utc).replace(" ", "T") + "Z");
+  if (Number.isNaN(d.getTime())) return String(utc);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+export function readLogo() {
+  try {
+    const raw = getSetting("logo");
+    if (!raw) return null;
+    const logo = JSON.parse(raw);
+    if (
+      logo &&
+      Number.isInteger(logo.width) &&
+      logo.width > 0 &&
+      logo.width <= 384 &&
+      Number.isInteger(logo.height) &&
+      logo.height > 0 &&
+      logo.height <= 400 &&
+      Array.isArray(logo.bitmap)
+    ) {
+      return { width: logo.width, height: logo.height, bitmap: logo.bitmap };
+    }
+  } catch {
+    /* corrupted logo -> treated as unset */
+  }
+  return null;
+}
+
 export function buildReceipt({ sale, items, storeName }) {
   const lines = [];
+  lines.push({ type: "logo" });
   lines.push({ align: "center", bold: true, text: padCenter(storeName || "99tk Store", W) });
   lines.push({ type: "blank" });
   lines.push({ text: `Invoice: ${sale.invoice_no}` });
-  lines.push({ text: `Date: ${sale.created_at}` });
+  lines.push({ text: `Date: ${localDateTime(sale.created_at)}` });
   lines.push({ type: "divider" });
   lines.push({
     text: `${padRight("Item", 24)}${padLeft("Qty", 6)}${padLeft("Total", 12)}`,
@@ -48,14 +82,30 @@ export function buildReceipt({ sale, items, storeName }) {
   lines.push({ type: "divider" });
   lines.push({ align: "center", bold: true, text: padCenter("Thank you!", W) });
   lines.push({ align: "center", text: padCenter("Have a nice day", W) });
-  return lines;
+  return { logo: readLogo(), lines };
 }
 
-export function escposBytes(lines) {
+export function escposBytes(receipt) {
+  const { logo, lines } = receipt;
   const chunks = [];
   chunks.push(Buffer.from([0x1b, 0x40]));
+  if (logo && logo.width > 0 && logo.height > 0 && Array.isArray(logo.bitmap) && logo.bitmap.length) {
+    const widthBytes = Math.ceil(logo.width / 8);
+    const offset = Math.max(0, Math.floor((PRINTER_DOTS - logo.width) / 2));
+    chunks.push(Buffer.from([0x1d, 0x4c, offset & 0xff, offset >> 8]));
+    chunks.push(
+      Buffer.from([
+        0x1d, 0x76, 0x30, 0x00,
+        widthBytes & 0xff, widthBytes >> 8,
+        logo.height & 0xff, logo.height >> 8,
+      ])
+    );
+    chunks.push(Buffer.from(logo.bitmap));
+    chunks.push(Buffer.from([0x1d, 0x4c, 0x00, 0x00]));
+    chunks.push(Buffer.from([0x1b, 0x64, 0x01]));
+  }
   for (const line of lines) {
-    if (line.type === "blank") {
+    if (line.type === "logo" || line.type === "blank") {
       chunks.push(Buffer.from([0x1b, 0x64, 0x01]));
       continue;
     }

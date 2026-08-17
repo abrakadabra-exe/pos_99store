@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
-
-const taka = (n) => "৳" + Number(n).toFixed(2);
+import { taka } from "../format.js";
 
 export default function Dashboard() {
   const [lowCount, setLowCount] = useState(null);
@@ -14,7 +13,7 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
       <p className="mt-1 text-sm text-slate-500">
         {summary ? `Today (${summary.date}): ${summary.count} sale${summary.count === 1 ? "" : "s"}` : "Loading today's numbers…"}

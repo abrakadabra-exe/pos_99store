@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import Receipt from "../components/Receipt.jsx";
-
-const taka = (n) => "৳" + Number(n).toFixed(2);
+import { taka, localTime } from "../format.js";
 
 export default function Sales() {
   const [sales, setSales] = useState(null);
@@ -17,12 +16,12 @@ export default function Sales() {
   useEffect(load, []);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <h1 className="text-2xl font-bold text-slate-800">Today's sales</h1>
       <p className="mt-1 text-sm text-slate-500">Click a sale to reopen its receipt</p>
 
-      <div className="mt-5 rounded-xl bg-white shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="mt-5 rounded-xl bg-white shadow-sm overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
               <th className="px-4 py-3">Invoice</th>
@@ -48,7 +47,7 @@ export default function Sales() {
                 className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
               >
                 <td className="px-4 py-3 font-semibold text-slate-800">{s.invoice_no}</td>
-                <td className="px-4 py-3 text-slate-600">{s.created_at.slice(11, 16)}</td>
+                <td className="px-4 py-3 text-slate-600">{localTime(s.created_at)}</td>
                 <td className="px-4 py-3 text-slate-600">{s.items_count}</td>
                 <td className="px-4 py-3 text-slate-600">
                   {{ cash: "Cash", bkash: "bKash", nagad: "Nagad" }[s.payment_method] || s.payment_method}
@@ -74,7 +73,7 @@ export default function Sales() {
                 ×
               </button>
             </div>
-            <Receipt lines={detail.receipt} />
+            <Receipt receipt={detail.receipt} />
           </div>
         </div>
       )}
