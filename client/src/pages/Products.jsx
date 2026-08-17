@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { taka, localDateTime } from "../format.js";
+import LabelModal from "../components/LabelModal.jsx";
 
 function Modal({ title, onClose, children }) {
   return (
@@ -314,6 +315,7 @@ export default function Products() {
   const [editing, setEditing] = useState(null);
   const [stocking, setStocking] = useState(null);
   const [history, setHistory] = useState(null);
+  const [labelTarget, setLabelTarget] = useState(null);
   const [msg, setMsg] = useState(null);
   const [searchParams] = useSearchParams();
 
@@ -426,6 +428,8 @@ export default function Products() {
                   <button onClick={() => { setEditing(p); }} className="text-slate-600 hover:underline text-xs">Edit</button>
                   <span className="mx-1.5 text-slate-300">|</span>
                   <button onClick={() => { setHistory(p); }} className="text-slate-600 hover:underline text-xs">History</button>
+                  <span className="mx-1.5 text-slate-300">|</span>
+                  <button onClick={() => { setLabelTarget(p); }} className="text-slate-600 hover:underline text-xs">Label</button>
                 </td>
               </tr>
             ))}
@@ -472,6 +476,7 @@ export default function Products() {
           <History product={history} />
         </Modal>
       )}
+      {labelTarget && <LabelModal product={labelTarget} onClose={() => setLabelTarget(null)} />}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import Receipt from "../components/Receipt.jsx";
+import LabelModal from "../components/LabelModal.jsx";
 import { taka } from "../format.js";
 
 const METHOD = {
@@ -21,6 +22,7 @@ export default function Pos() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
+  const [labelTarget, setLabelTarget] = useState(null);
   const scanRef = useRef(null);
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0);
@@ -37,7 +39,7 @@ export default function Pos() {
           l.product_id === p.id ? { ...l, qty: Math.min(l.qty + qty, p.stock) } : l
         );
       }
-      return [...prev, { product_id: p.id, name: p.name_en, price: p.sale_price, qty, max: p.stock }];
+      return [...prev, { product_id: p.id, name: p.name_en, price: p.sale_price, qty, max: p.stock, barcode: p.barcode || "" }];
     });
     setPicks(null);
     setQuery("");
@@ -209,6 +211,13 @@ export default function Pos() {
                   <div className="text-xs text-slate-500">
                     {taka(l.price)} each · stock {l.max}
                   </div>
+                  <button
+                    onClick={() => setLabelTarget({ id: l.product_id, name_en: l.name, sale_price: l.price, barcode: l.barcode })}
+                    className="mt-1 text-xs font-medium text-emerald-700 hover:underline"
+                    title="Print a shelf label for this product"
+                  >
+                    Print label
+                  </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -310,6 +319,8 @@ export default function Pos() {
           </div>
         </div>
       </div>
+
+      {labelTarget && <LabelModal product={labelTarget} onClose={() => setLabelTarget(null)} />}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import userRoutes from "./routes/users.js";
 import productRoutes from "./routes/products.js";
 import saleRoutes from "./routes/sales.js";
 import settingsRoutes from "./routes/settings.js";
+import labelRoutes from "./routes/labels.js";
 import { backupInfo } from "./backup.js";
 import { requireAuth } from "./auth.js";
 
@@ -25,6 +26,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/sales", saleRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/labels", labelRoutes);
 
 app.get("/api/backup/info", requireAuth, (req, res) => {
   res.json(backupInfo());
