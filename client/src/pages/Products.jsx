@@ -1,39 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { taka, localDateTime } from "../format.js";
 import LabelModal from "../components/LabelModal.jsx";
-
-function Modal({ title, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-lg rounded-xl bg-white shadow-xl p-5 max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-slate-800">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">
-            ×
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
+import Modal from "../components/Modal.jsx";
 
 const field =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500";
 const btn =
   "rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed";
 
-function ProductForm({ initial, onDone, onError }) {
+function ProductForm({ initial, categories, onDone, onError }) {
   const [f, setF] = useState({
     barcode: initial?.barcode || "",
     name_en: initial?.name_en || "",
     name_bn: initial?.name_bn || "",
-    category: initial?.category || "",
+    category_id: initial?.category_id ?? "",
     cost_price: initial?.cost_price ?? "",
     sale_price: initial?.sale_price ?? "",
     low_stock_threshold: initial?.low_stock_threshold ?? "",
@@ -46,7 +28,10 @@ function ProductForm({ initial, onDone, onError }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const body = { ...f };
+      const body = {
+        ...f,
+        category_id: f.category_id ? Number(f.category_id) : undefined,
+      };
       if (initial) delete body.stock;
       const data = await api(initial ? `/products/${initial.id}` : "/products", {
         method: initial ? "PATCH" : "POST",
@@ -69,7 +54,25 @@ function ProductForm({ initial, onDone, onError }) {
         </div>
         <div>
           <label className="text-xs font-medium text-slate-600">Category</label>
-          <input className={field} value={f.category} onChange={set("category")} placeholder="e.g. Snacks" />
+          {categories?.length ? (
+            <select className={field} value={f.category_id} onChange={set("category_id")} required>
+              <option value="" disabled>
+                Choose a category…
+              </option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Create a category first —{" "}
+              <Link to="/categories" className="font-medium underline">
+                go to Categories
+              </Link>
+            </div>
+          )}
         </div>
         <div className="col-span-2">
           <label className="text-xs font-medium text-slate-600">Name (English)</label>
@@ -105,7 +108,11 @@ function ProductForm({ initial, onDone, onError }) {
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-2">
-        <button type="submit" disabled={busy} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}>
+        <button
+          type="submit"
+          disabled={busy || !categories?.length}
+          className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}
+        >
           {busy ? "Saving…" : initial ? "Save changes" : "Create product"}
         </button>
       </div>
@@ -250,20 +257,20 @@ function ImportCsv({ onDone, onError }) {
           <table className="text-xs min-w-[460px]">
             <thead>
               <tr className="text-left text-emerald-700">
-                {["barcode", "name_en", "category", "cost_price", "sale_price", "stock", "low_stock_threshold"].map((c) => (
-                  <th key={c} className="px-1 py-1 border border-emerald-200 bg-emerald-50 font-mono whitespace-nowrap">{c}</th>
+                {["barcode", "name_en", "category", "cost_price", "sale_price", "stock", "low_stock_threshold"].map((c, i) => (
+                  <th key={c} className={`px-1 py-1 border border-emerald-200 bg-emerald-50 font-mono whitespace-nowrap ${i >= 3 ? "text-right" : ""}`}>{c}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               <tr>
                 {["6933046200012", "Shampoo Sachet 20ml", "Personal Care", "9", "99", "200", "50"].map((c, i) => (
-                  <td key={i} className="px-1 py-1 border border-slate-200 text-slate-600 whitespace-nowrap">{c}</td>
+                  <td key={i} className={`px-1 py-1 border border-slate-200 text-slate-600 whitespace-nowrap ${i >= 3 ? "text-right" : ""}`}>{c}</td>
                 ))}
               </tr>
               <tr>
                 {["", "Biscuit Khaja 100g", "Snacks", "40", "99", "300", "60"].map((c, i) => (
-                  <td key={i} className="px-1 py-1 border border-slate-200 text-slate-600 whitespace-nowrap">{c || "—"}</td>
+                  <td key={i} className={`px-1 py-1 border border-slate-200 text-slate-600 whitespace-nowrap ${i >= 3 ? "text-right" : ""}`}>{c || "—"}</td>
                 ))}
               </tr>
             </tbody>
@@ -273,6 +280,10 @@ function ImportCsv({ onDone, onError }) {
           <li>• Empty <span className="font-mono">barcode</span> → a barcode is auto-generated.</li>
           <li>• Existing barcode → row updates that product; its <span className="font-mono">stock</span> column is <b>added</b> to current stock.</li>
           <li>• New barcode → product created with that opening stock.</li>
+          <li>
+            • <span className="font-mono">category</span> must already exist in <b>Categories</b> — unknown categories
+            reject the whole file, so create them first.
+          </li>
           <li>• Wrong columns or any invalid row → the whole file is rejected.</li>
           <li>• Excel: only the first sheet is read, first row must be the column names.</li>
         </ul>
@@ -308,32 +319,43 @@ function ImportCsv({ onDone, onError }) {
 
 export default function Products() {
   const [products, setProducts] = useState(null);
+  const [categories, setCategories] = useState(null);
   const [lowCount, setLowCount] = useState(0);
   const [q, setQ] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
+  const [category, setCategory] = useState("");
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
   const [stocking, setStocking] = useState(null);
   const [history, setHistory] = useState(null);
   const [labelTarget, setLabelTarget] = useState(null);
   const [msg, setMsg] = useState(null);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    api("/categories")
+      .then((d) => setCategories(d.categories))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("low") === "1") setOnlyLow(true);
+    const c = searchParams.get("category");
+    if (c) setCategory(c);
   }, [searchParams]);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (onlyLow) params.set("low", "1");
+    if (category) params.set("category", category);
     api(`/products?${params}`)
       .then((d) => {
         setProducts(d.products);
         setLowCount(d.lowCount);
       })
       .catch((err) => setMsg({ kind: "error", text: err.message }));
-  }, [q, onlyLow]);
+  }, [q, onlyLow, category]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0);
@@ -344,6 +366,14 @@ export default function Products() {
     setMsg({ kind, text });
     setTimeout(() => setMsg(null), 4000);
   };
+
+  function changeCategory(v) {
+    setCategory(v);
+    const sp = new URLSearchParams(searchParams);
+    if (v) sp.set("category", v);
+    else sp.delete("category");
+    setSearchParams(sp);
+  }
 
   return (
     <div className="p-4 sm:p-6">
@@ -381,6 +411,19 @@ export default function Products() {
           <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} className="accent-emerald-600" />
           Low stock only
         </label>
+        <select
+          className={`${field} w-full sm:w-auto`}
+          value={category}
+          onChange={(e) => changeCategory(e.target.value)}
+          aria-label="Filter by category"
+        >
+          <option value="">All categories</option>
+          {categories?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="mt-4 rounded-xl bg-white shadow-sm overflow-x-auto">
@@ -440,6 +483,7 @@ export default function Products() {
       {modal === "add" && (
         <Modal title="Add product" onClose={() => setModal(null)}>
           <ProductForm
+            categories={categories}
             onDone={(p) => { setModal(null); notify("success", `"${p.name_en}" created — barcode ${p.barcode}`); load(); }}
             onError={(m) => notify("error", m)}
           />
@@ -457,6 +501,7 @@ export default function Products() {
         <Modal title={`Edit ${editing.name_en}`} onClose={() => setEditing(null)}>
           <ProductForm
             initial={editing}
+            categories={categories}
             onDone={() => { setEditing(null); notify("success", "Product updated"); load(); }}
             onError={(m) => notify("error", m)}
           />

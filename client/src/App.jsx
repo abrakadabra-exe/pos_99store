@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Products from "./pages/Products.jsx";
 import Pos from "./pages/Pos.jsx";
 import Reports from "./pages/Reports.jsx";
+import Categories from "./pages/Categories.jsx";
 import Sales from "./pages/Sales.jsx";
 import Users from "./pages/Users.jsx";
 import Settings from "./pages/Settings.jsx";
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/pos" element={<Pos />} />
           <Route path="/sales" element={<Sales />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/categories" element={<Categories />} />
           <Route path="/products" element={<Products />} />
           <Route path="/users" element={<Users />} />
           <Route path="/settings" element={<Settings />} />

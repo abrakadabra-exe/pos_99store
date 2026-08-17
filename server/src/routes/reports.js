@@ -51,10 +51,11 @@ router.get("/summary", (req, res, next) => {
 
     const categories = db
       .prepare(
-        `SELECT COALESCE(p.category, 'Other') AS category,
+        `SELECT COALESCE(c.name, 'Other') AS category,
                 COUNT(*) AS items, COALESCE(SUM(si.qty), 0) AS qty, COALESCE(SUM(si.unit_price * si.qty), 0) AS total
          FROM sale_items si JOIN sales s ON s.id = si.sale_id
          LEFT JOIN products p ON p.id = si.product_id
+         LEFT JOIN categories c ON c.id = p.category_id
          WHERE s.invoice_day >= ?
          GROUP BY category ORDER BY total DESC`
       )

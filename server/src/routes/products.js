@@ -89,18 +89,27 @@ router.get("/", (req, res, next) => {
   try {
     const q = (req.query.q || "").trim();
     const low = req.query.low === "1";
+    const catParam = String(req.query.category || "").trim();
     const params = [];
     let where = "";
     if (q) {
-      where = "WHERE p.name_en LIKE ? OR p.barcode LIKE ? OR p.category LIKE ?";
+      where = "WHERE p.name_en LIKE ? OR p.barcode LIKE ? OR c.name LIKE ?";
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    }
+    if (catParam) {
+      const numCat = Number(catParam);
+      const byId = Number.isInteger(numCat) && numCat > 0;
+      where += where ? " AND " : "WHERE ";
+      where += byId ? "p.category_id = ?" : "c.name = ? COLLATE NOCASE";
+      params.push(byId ? numCat : catParam);
     }
     if (low) {
       where += where ? " AND p.stock <= p.low_stock_threshold" : "WHERE p.stock <= p.low_stock_threshold";
     }
     const rows = db
       .prepare(
-        `SELECT p.*, (p.stock <= p.low_stock_threshold) AS low_stock FROM products p ${where} ORDER BY p.name_en COLLATE NOCASE`
+        `SELECT p.*, c.name AS category, (p.stock <= p.low_stock_threshold) AS low_stock
+         FROM products p LEFT JOIN categories c ON c.id = p.category_id ${where} ORDER BY p.name_en COLLATE NOCASE`
       )
       .all(...params);
     res.json({ products: rows, lowCount: db.prepare("SELECT COUNT(*) c FROM products WHERE stock <= low_stock_threshold").get().c });
@@ -111,7 +120,11 @@ router.get("/", (req, res, next) => {
 
 router.get("/:id", (req, res, next) => {
   try {
-    const p = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+    const p = db
+      .prepare(
+        "SELECT p.*, c.name AS category FROM products p LEFT JOIN categories c ON c.id = p.category_id WHERE p.id = ?"
+      )
+      .get(req.params.id);
     if (!p) return res.status(404).json({ error: "Product not found" });
     const moves = db
       .prepare("SELECT * FROM stock_moves WHERE product_id = ? ORDER BY id DESC LIMIT 50")
@@ -144,9 +157,9 @@ function parseProductBody(body, { partial = false } = {}) {
     return s;
   };
   if (partial) {
-    const fields = ["barcode", "name_en", "name_bn", "category", "cost_price", "sale_price", "low_stock_threshold"];
+    const fields = ["barcode", "name_en", "name_bn", "category_id", "cost_price", "sale_price", "low_stock_threshold"];
     for (const f of fields) {
-      const v = f.endsWith("_price") || f === "low_stock_threshold" ? num(f) : str(f);
+      const v = f.endsWith("_price") || f === "low_stock_threshold" || f === "category_id" ? num(f) : str(f);
       if (v !== undefined) p[f] = v;
     }
   } else {
@@ -154,7 +167,9 @@ function parseProductBody(body, { partial = false } = {}) {
     if (!name) errors.push("name_en is required");
     else p.name_en = name;
     p.name_bn = str("name_bn", 200) || "";
-    p.category = str("category", 100) || "";
+    const categoryId = Number(body?.category_id);
+    if (!Number.isInteger(categoryId) || categoryId <= 0) errors.push("category_id is required");
+    else p.category_id = categoryId;
     p.cost_price = num("cost_price") ?? 0;
     p.sale_price = num("sale_price") ?? 0;
     p.low_stock_threshold = num("low_stock_threshold") ?? 0;
@@ -173,16 +188,18 @@ router.post("/", (req, res, next) => {
       return res.status(400).json({ error: "stock must be a number >= 0" });
 
     const create = db.transaction(() => {
+      const category = db.prepare("SELECT id FROM categories WHERE id = ?").get(p.category_id);
+      if (!category) throw new Error("CATEGORY_MISSING");
       const info = db
         .prepare(
-          `INSERT INTO products (barcode, name_en, name_bn, category, cost_price, sale_price, stock, low_stock_threshold)
+          `INSERT INTO products (barcode, name_en, name_bn, category_id, cost_price, sale_price, stock, low_stock_threshold)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           p.barcode || null,
           p.name_en,
           p.name_bn,
-          p.category,
+          p.category_id,
           p.cost_price,
           p.sale_price,
           initialStock,
@@ -207,6 +224,9 @@ router.post("/", (req, res, next) => {
     res.status(201).json({ product });
   } catch (e) {
     if (String(e.message).includes("UNIQUE")) return res.status(409).json({ error: "Barcode already exists" });
+    if (String(e.message).includes("CATEGORY_MISSING")) {
+      return res.status(400).json({ error: "Category does not exist" });
+    }
     next(e);
   }
 });
@@ -218,6 +238,10 @@ router.patch("/:id", (req, res, next) => {
     const { p, errors } = parseProductBody(req.body, { partial: true });
     if (errors.length) return res.status(400).json({ error: errors.join("; ") });
     if (Object.keys(p).length === 0) return res.status(400).json({ error: "Nothing to update" });
+    if (p.category_id !== undefined) {
+      const cat = db.prepare("SELECT id FROM categories WHERE id = ?").get(p.category_id);
+      if (!cat) return res.status(400).json({ error: "Category does not exist" });
+    }
     if (p.barcode !== undefined) {
       const dup = db.prepare("SELECT id FROM products WHERE barcode = ? AND id != ?").get(p.barcode, existing.id);
       if (dup) return res.status(409).json({ error: "Barcode already exists" });
@@ -283,6 +307,9 @@ function applyImport(header, rows, userId) {
   const idx = Object.fromEntries(header.map((h, i) => [h, i]));
 
   const errors = [];
+  const catLookup = new Map(
+    db.prepare("SELECT id, name FROM categories").all().map((c) => [String(c.name).trim().toLowerCase(), c.id])
+  );
   const parsed = rows.map((r, i) => {
     const rowNo = i + 2;
     const get = (col) => cellToText(r[idx[col]] ?? "");
@@ -294,9 +321,11 @@ function applyImport(header, rows, userId) {
     const cat = get("category");
     const barcode = get("barcode");
     if (!name) errors.push(`Row ${rowNo}: name_en is required`);
-    if (cat.length > 100) errors.push(`Row ${rowNo}: category too long`);
     if (barcode.length > 32) errors.push(`Row ${rowNo}: barcode too long`);
-    return { rowNo, barcode, name, cat, cost, sale, stock, threshold };
+    const catId = catLookup.get(String(cat).trim().toLowerCase());
+    if (!cat.trim()) errors.push(`Row ${rowNo}: category is required — create it in Categories first`);
+    else if (!catId) errors.push(`Row ${rowNo}: category "${cat}" doesn't exist — create it in Categories first`);
+    return { rowNo, barcode, name, catId, cost, sale, stock, threshold };
   });
 
   if (errors.length) {
@@ -313,8 +342,8 @@ function applyImport(header, rows, userId) {
       const existing = row.barcode ? byBarcode.get(row.barcode) : null;
       if (existing) {
         db.prepare(
-          `UPDATE products SET name_en = ?, category = ?, cost_price = ?, sale_price = ?, low_stock_threshold = ?, stock = stock + ?, updated_at = datetime('now') WHERE id = ?`
-        ).run(row.name, row.cat, row.cost, row.sale, row.threshold, row.stock, existing.id);
+          `UPDATE products SET name_en = ?, category_id = ?, cost_price = ?, sale_price = ?, low_stock_threshold = ?, stock = stock + ?, updated_at = datetime('now') WHERE id = ?`
+        ).run(row.name, row.catId, row.cost, row.sale, row.threshold, row.stock, existing.id);
         if (row.stock > 0) {
           db.prepare(
             "INSERT INTO stock_moves (product_id, qty, type, ref, note, user_id) VALUES (?, ?, 'purchase', ?, 'Import', ?)"
@@ -324,10 +353,10 @@ function applyImport(header, rows, userId) {
       } else {
         const info = db
           .prepare(
-            `INSERT INTO products (barcode, name_en, category, cost_price, sale_price, stock, low_stock_threshold)
+            `INSERT INTO products (barcode, name_en, category_id, cost_price, sale_price, stock, low_stock_threshold)
              VALUES (?, ?, ?, ?, ?, ?, ?)`
           )
-          .run(row.barcode || null, row.name, row.cat, row.cost, row.sale, row.stock, row.threshold);
+          .run(row.barcode || null, row.name, row.catId, row.cost, row.sale, row.stock, row.threshold);
         const id = info.lastInsertRowid;
         if (!row.barcode) {
           db.prepare("UPDATE products SET barcode = ? WHERE id = ?").run(ean13FromId(id), id);

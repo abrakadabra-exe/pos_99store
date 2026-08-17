@@ -8,6 +8,7 @@ const NAV = [
   { to: "/pos", label: "POS", icon: "🛒" },
   { to: "/sales", label: "Sales", icon: "🧾" },
   { to: "/products", label: "Products", icon: "🏷️" },
+  { to: "/categories", label: "Categories", icon: "🗂️" },
   { to: "/reports", label: "Reports", icon: "📊" },
   { to: "/users", label: "Users", icon: "👥" },
   { to: "/settings", label: "Settings", icon: "⚙️" },

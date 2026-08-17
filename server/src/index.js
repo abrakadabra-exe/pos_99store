@@ -10,6 +10,7 @@ import settingsRoutes from "./routes/settings.js";
 import labelRoutes from "./routes/labels.js";
 import printRoutes from "./routes/print.js";
 import reportRoutes from "./routes/reports.js";
+import categoryRoutes from "./routes/categories.js";
 import { backupInfo } from "./backup.js";
 import { requireAuth } from "./auth.js";
 
@@ -31,6 +32,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/labels", labelRoutes);
 app.use("/api/print", printRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/categories", categoryRoutes);
 
 app.get("/api/backup/info", requireAuth, (req, res) => {
   res.json(backupInfo());

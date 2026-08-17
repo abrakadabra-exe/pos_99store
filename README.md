@@ -10,6 +10,7 @@ on a Windows machine behind the counter, and on a small VPS.
 - First-run setup wizard with a one-time emergency recovery code
 - PIN login (staff and admin roles), admin-only user management
 - Products with auto-generated EAN-13 barcodes when none is given
+- Categories managed up front (add, rename, delete, view items, filter)
 - Stock-in with a full movement history per product
 - Low-stock alerts (threshold per product, filterable list)
 - CSV and Excel (.xlsx/.xls) imports: any bad row rejects the whole
@@ -191,6 +192,8 @@ barcode,name_en,category,cost_price,sale_price,stock,low_stock_threshold
 - A new barcode creates the product with that opening stock.
 - Wrong columns or any invalid row reject the whole file.
 - Files up to 8 MB; .csv, .xlsx and .xls all work.
+- Categories must be created first (Categories tab): a row whose
+  category does not exist rejects the whole file.
 
 ## Project layout
 
@@ -201,9 +204,10 @@ server/src/backup.js      live JSONL backup of every write
 server/src/receipt.js     ESC/POS receipt builder (logo, totals, cut)
 server/src/label.js       TSPL label builder (EAN-13, price, copies)
 server/src/routes/        auth, users, products, sales, labels,
-                          settings, reports, print (server USB)
+                          settings, reports, print (server USB),
+                          categories
 client/src/pages/         setup, login, dashboard, products, pos,
-                          sales, reports, users, settings
+                          sales, reports, users, settings, categories
 client/src/printer.js     WebUSB connect / send / auto-reconnect
 client/src/components/    shell, receipt, label preview/modal, logo
 ```

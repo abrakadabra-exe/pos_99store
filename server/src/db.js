@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
+export const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, "pos.db"));
@@ -14,7 +14,8 @@ db.pragma("foreign_keys = ON");
 const MIGRATIONS = [
   {
     version: 1,
-    sql: `
+    migrate() {
+      db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -95,42 +96,70 @@ const MIGRATIONS = [
         payload TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-    `,
+      `);
+    },
   },
   {
     version: 2,
-    sql: `
-      DROP TABLE IF EXISTS sales;
-      CREATE TABLE sales (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        invoice_day TEXT NOT NULL DEFAULT (date('now')),
-        invoice_no TEXT NOT NULL,
-        subtotal REAL NOT NULL DEFAULT 0,
-        discount REAL NOT NULL DEFAULT 0,
-        total REAL NOT NULL DEFAULT 0,
-        payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','bkash','nagad')),
-        payment_ref TEXT NOT NULL DEFAULT '',
-        cash_received REAL NOT NULL DEFAULT 0,
-        change_given REAL NOT NULL DEFAULT 0,
-        user_id INTEGER REFERENCES users(id),
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        UNIQUE (invoice_day, invoice_no)
-      );
-      CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
-      CREATE INDEX IF NOT EXISTS idx_sales_day ON sales(invoice_day);
-    `,
+    migrate() {
+      db.exec(`
+        DROP TABLE IF EXISTS sales;
+        CREATE TABLE IF NOT EXISTS sales (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_day TEXT NOT NULL DEFAULT (date('now')),
+          invoice_no TEXT NOT NULL,
+          subtotal REAL NOT NULL DEFAULT 0,
+          discount REAL NOT NULL DEFAULT 0,
+          total REAL NOT NULL DEFAULT 0,
+          payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','bkash','nagad')),
+          payment_ref TEXT NOT NULL DEFAULT '',
+          cash_received REAL NOT NULL DEFAULT 0,
+          change_given REAL NOT NULL DEFAULT 0,
+          user_id INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE (invoice_day, invoice_no)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
+        CREATE INDEX IF NOT EXISTS idx_sales_day ON sales(invoice_day);
+      `);
+    },
+  },
+  {
+    version: 3,
+    migrate() {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      const cols = () => db.prepare("PRAGMA table_info(products)").all().map((c) => c.name);
+      if (!cols().includes("category")) return;
+      db.exec(`
+        INSERT OR IGNORE INTO categories (name)
+          SELECT DISTINCT TRIM(category) FROM products WHERE TRIM(COALESCE(category, '')) <> '';
+      `);
+      if (!cols().includes("category_id")) {
+        db.exec(`ALTER TABLE products ADD COLUMN category_id INTEGER REFERENCES categories(id)`);
+      }
+      db.exec(`
+        UPDATE products SET category_id = (
+          SELECT c.id FROM categories c WHERE c.name = TRIM(products.category)
+        ) WHERE TRIM(COALESCE(category, '')) <> '';
+      `);
+      db.exec(`DROP INDEX IF EXISTS idx_products_category`);
+      db.exec(`ALTER TABLE products DROP COLUMN category`);
+    },
   },
 ];
 
 function migrate() {
-  const { user_version: current } = db.pragma("user_version", { simple: true });
+  const current = db.pragma("user_version", { simple: true });
   for (const m of MIGRATIONS) {
     if (m.version <= current) continue;
-    const run = db.transaction(() => {
-      db.exec(m.sql);
-      db.pragma(`user_version = ${m.version}`);
-    });
-    run();
+    m.migrate();
+    db.pragma(`user_version = ${m.version}`);
   }
 }
 
