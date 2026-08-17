@@ -1,7 +1,7 @@
 import { getSetting } from "./db.js";
 
 const W = 42;
-const PRINTER_DOTS = 384;
+const PRINTER_DOTS = 576;
 
 function padRight(text, width) {
   text = String(text);
@@ -52,6 +52,23 @@ export function readLogo() {
   return null;
 }
 
+function itemLines(it) {
+  const name = String(it.name);
+  const first = name.slice(0, 24);
+  const rest = name.slice(24);
+  const lines = [
+    {
+      text: `${padRight(first, 24)}${padLeft(it.qty, 6)}${padLeft(taka(it.unit_price * it.qty), 12)}`,
+    },
+  ];
+  let rem = rest;
+  while (rem.length) {
+    lines.push({ text: padRight(rem.slice(0, 40), W) });
+    rem = rem.slice(40);
+  }
+  return lines;
+}
+
 export function buildReceipt({ sale, items, storeName }) {
   const lines = [];
   lines.push({ type: "logo" });
@@ -64,9 +81,7 @@ export function buildReceipt({ sale, items, storeName }) {
     text: `${padRight("Item", 24)}${padLeft("Qty", 6)}${padLeft("Total", 12)}`,
   });
   for (const it of items) {
-    lines.push({
-      text: `${padRight(it.name, 24)}${padLeft(it.qty, 6)}${padLeft(taka(it.unit_price * it.qty), 12)}`,
-    });
+    lines.push(...itemLines(it));
   }
   lines.push({ type: "divider" });
   lines.push({ text: `${padRight("Subtotal", 30)}${padLeft(taka(sale.subtotal), 12)}` });
@@ -116,7 +131,7 @@ export function escposBytes(receipt) {
     const align = { left: 0, center: 1, right: 2 }[line.align] ?? 0;
     chunks.push(Buffer.from([0x1b, 0x61, align]));
     chunks.push(Buffer.from([0x1b, 0x45, line.bold ? 1 : 0]));
-    chunks.push(Buffer.from([0x1d, 0x21, line.bold ? 0x11 : 0x00]));
+    chunks.push(Buffer.from([0x1d, 0x21, line.bold ? 0x01 : 0x00]));
     chunks.push(Buffer.from(line.text.slice(0, W) + "\n", "ascii"));
   }
   chunks.push(Buffer.from([0x1b, 0x64, 0x03]));

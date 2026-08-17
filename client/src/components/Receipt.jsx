@@ -15,7 +15,7 @@ export default function Receipt({ receipt }) {
   return (
     <div
       className="mx-auto bg-white px-4 py-4 shadow-sm border border-slate-200"
-      style={{ width: "320px", minHeight: "180px" }}
+      style={{ width: "360px", minHeight: "180px" }}
     >
       {logo && <LogoCanvas logo={logo} width="280px" />}
       <div className="mt-2 text-slate-700">
