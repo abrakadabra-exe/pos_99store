@@ -1,18 +1,39 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
+import { api } from "../api.js";
 
 export default function Login() {
   const { login, user } = useAuth();
   const navigate = useNavigate();
+  const [checkingSetup, setCheckingSetup] = useState(true);
+  const [setupDone, setSetupDone] = useState(false);
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    api("/auth/setup/status", { auth: false })
+      .then(({ setupDone }) => {
+        setSetupDone(setupDone);
+        if (!setupDone) navigate("/setup", { replace: true });
+      })
+      .catch(() => {})
+      .finally(() => setCheckingSetup(false));
+  }, [navigate]);
+
   if (user) {
     navigate("/", { replace: true });
     return null;
+  }
+
+  if (checkingSetup) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-slate-100 text-slate-500">
+        Checking setup status…
+      </div>
+    );
   }
 
   async function submit(e) {
@@ -69,6 +90,14 @@ export default function Login() {
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </div>
+        {!setupDone && (
+          <p className="mt-4 text-center text-sm text-slate-500">
+            First time?{" "}
+            <Link to="/setup" className="font-medium text-emerald-700 hover:underline">
+              Create your store account
+            </Link>
+          </p>
+        )}
       </form>
     </div>
   );
