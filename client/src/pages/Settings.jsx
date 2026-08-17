@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import LogoCanvas from "../components/LogoCanvas.jsx";
+import { connectPrinter, disconnectPrinter, sendToPrinter, usePrinter } from "../printer.js";
 
 const field =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500";
@@ -48,6 +49,142 @@ function imageToBitmap(file) {
     };
     img.src = url;
   });
+}
+
+function PrinterRow({ kind, title, detail, webUsbSupported }) {
+  const conn = usePrinter(kind);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function connect() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await connectPrinter(kind);
+      setMsg({ kind: "success", text: `${title} connected` });
+    } catch (err) {
+      setMsg({ kind: "error", text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function test() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const t = await api("/print/test");
+      await sendToPrinter(kind, kind === "receipt" ? t.receipt : t.label);
+      setMsg({ kind: "success", text: "Test page sent to the printer" });
+    } catch (err) {
+      setMsg({ kind: "error", text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-semibold text-slate-800">{title}</div>
+          <div className="mt-0.5 text-xs text-slate-500">{detail}</div>
+          <div className="mt-1 text-xs">
+            {conn ? (
+              <span className="font-medium text-emerald-700">Connected — {conn.name}</span>
+            ) : (
+              <span className="text-slate-400">Not connected</span>
+            )}
+          </div>
+          {msg && (
+            <div className={`mt-2 rounded-lg px-3 py-1.5 text-xs ${msg.kind === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {msg.text}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {conn ? (
+            <>
+              <button
+                onClick={test}
+                disabled={busy}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {busy ? "Printing…" : "Test print"}
+              </button>
+              <button
+                onClick={() => disconnectPrinter(kind)}
+                disabled={busy}
+                className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                Disconnect
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={connect}
+              disabled={busy || !webUsbSupported}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+              title={webUsbSupported ? "Opens the browser device picker" : "WebUSB needs Chrome or Edge"}
+            >
+              {busy ? "Connecting…" : "Connect via WebUSB"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServerUsbRow() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function test(kind) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const t = await api("/print/test");
+      const data = kind === "receipt" ? t.receipt : t.label;
+      await api(`/print/${kind}`, { method: "POST", body: { data } });
+      setMsg({ kind: "success", text: `${kind === "receipt" ? "Receipt" : "Label"} printed via server USB` });
+    } catch (err) {
+      setMsg({ kind: "error", text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl bg-white p-5 shadow-sm">
+      <div className="font-semibold text-slate-800">Server USB printing (driver fallback)</div>
+      <p className="mt-1 text-xs text-slate-500">
+        Prints through the computer running the server. On Windows this needs the printer installed with the
+        Generic / Text Only driver — the app will find it automatically, or set its USB vendor/product IDs below.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          onClick={() => test("receipt")}
+          disabled={busy}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {busy ? "Printing…" : "Test receipt"}
+        </button>
+        <button
+          onClick={() => test("label")}
+          disabled={busy}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {busy ? "Printing…" : "Test label"}
+        </button>
+      </div>
+      {msg && (
+        <div className={`mt-2 rounded-lg px-3 py-1.5 text-xs ${msg.kind === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+          {msg.text}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ChangePin() {
@@ -107,6 +244,7 @@ function ChangePin() {
 export default function Settings() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const webUsbSupported = typeof navigator !== "undefined" && !!navigator.usb;
   const [settings, setSettings] = useState(null);
   const [storeName, setStoreName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -253,6 +391,30 @@ export default function Settings() {
           </button>
         </div>
       )}
+
+      <div className="rounded-xl bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-slate-800">Printers</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Connect the receipt and label printers from this browser. Until the hardware arrives, every print
+          button also works in simulator mode.
+        </p>
+        <div className="mt-4 space-y-4">
+          <PrinterRow
+            kind="receipt"
+            title="Receipt printer — Xprinter XP-Q807K"
+            detail="80mm thermal, ESC/POS"
+            webUsbSupported={webUsbSupported}
+          />
+          <PrinterRow
+            kind="label"
+            title="Label printer — Gprinter GP-3120TUD"
+            detail="40×30 mm labels, TSPL"
+            webUsbSupported={webUsbSupported}
+          />
+        </div>
+      </div>
+
+      <ServerUsbRow />
 
       <ChangePin />
     </div>

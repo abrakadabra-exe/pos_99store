@@ -10,6 +10,7 @@
   "dependencies": {
     "better-sqlite3": "^12.4.1",
     "express": "^5.1.0",
+    "usb": "^2.18.0",
     "xlsx": "^0.18.5"
   },
   "allowScripts": {

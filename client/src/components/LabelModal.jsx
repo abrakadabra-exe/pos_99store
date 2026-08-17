@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import LabelPreview from "./LabelPreview.jsx";
+import { getConnection, sendToPrinter } from "../printer.js";
 
 export default function LabelModal({ product, onClose }) {
   const [data, setData] = useState(null);
@@ -8,6 +9,7 @@ export default function LabelModal({ product, onClose }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [printed, setPrinted] = useState(false);
+  const [printNote, setPrintNote] = useState("");
 
   useEffect(() => {
     api("/labels", { method: "POST", body: { product_id: product.id, copies: 1 } })
@@ -22,6 +24,29 @@ export default function LabelModal({ product, onClose }) {
       const d = await api("/labels", { method: "POST", body: { product_id: product.id, copies } });
       setData(d);
       setPrinted(true);
+      setPrintNote("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function print() {
+    setBusy(true);
+    setError("");
+    setPrintNote("");
+    try {
+      const d = await api("/labels", { method: "POST", body: { product_id: product.id, copies } });
+      setData(d);
+      const conn = getConnection("label");
+      if (conn) {
+        await sendToPrinter("label", d.tspl);
+        setPrintNote(`sent to GP-3120TUD — ${copies} label${copies === 1 ? "" : "s"}`);
+      } else {
+        setPrinted(true);
+        setPrintNote("No printer connected — showing what the GP-3120TUD would receive (simulated)");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -75,21 +100,35 @@ export default function LabelModal({ product, onClose }) {
               +
             </button>
           </div>
-          <button
-            onClick={simulate}
-            disabled={busy}
-            className="ml-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-            title="Simulates the Gprinter GP-3120TUD while no real hardware is attached"
-          >
-            {busy ? "Printing…" : "Simulate print"}
-          </button>
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={simulate}
+              disabled={busy}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              title="Shows the exact TSPL commands the printer would receive"
+            >
+              {busy ? "…" : "Simulate"}
+            </button>
+            <button
+              onClick={print}
+              disabled={busy}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              title="Prints via WebUSB, or falls back to simulation"
+            >
+              {busy ? "Printing…" : "Print"}
+            </button>
+          </div>
         </div>
 
-        {printed && (
+        {printNote && (
+          <div className="mt-3 rounded-lg px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50">
+            {printNote}
+          </div>
+        )}
+
+        {(printed || printNote) && (
           <div className="mt-4 rounded-lg border border-slate-200 bg-slate-900 p-3">
-            <div className="text-xs font-bold text-emerald-400">
-              TSPL sent to GP-3120TUD (simulated) — {copies} label{copies === 1 ? "" : "s"}
-            </div>
+            <div className="text-xs font-bold text-emerald-400">TSPL for GP-3120TUD:</div>
             <pre className="mt-2 overflow-x-auto text-[11px] leading-snug text-slate-300">{tsplText}</pre>
           </div>
         )}

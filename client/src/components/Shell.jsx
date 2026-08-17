@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
+import { initPrinters } from "../printer.js";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: "▦" },
@@ -21,6 +22,9 @@ export default function Shell() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => setOpen(false), []);
+  useEffect(() => {
+    initPrinters();
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === "Escape" && setOpen(false);

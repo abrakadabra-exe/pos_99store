@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import Receipt from "../components/Receipt.jsx";
 import LabelModal from "../components/LabelModal.jsx";
 import { taka } from "../format.js";
+import { getConnection, sendToPrinter } from "../printer.js";
 
 const METHOD = {
   cash: { label: "Cash", note: "Enter amount received" },
@@ -23,6 +24,7 @@ export default function Pos() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   const [labelTarget, setLabelTarget] = useState(null);
+  const [printMsg, setPrintMsg] = useState("");
   const scanRef = useRef(null);
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0);
@@ -114,6 +116,29 @@ export default function Pos() {
     setRef("");
     setError("");
     setMethod("cash");
+    setPrintMsg("");
+  }
+
+  async function printReceipt() {
+    setPrintMsg("");
+    const conn = getConnection("receipt");
+    if (conn) {
+      try {
+        await sendToPrinter("receipt", done.escpos);
+        setPrintMsg({ kind: "success", text: "Receipt sent to the printer" });
+      } catch (err) {
+        setPrintMsg({ kind: "error", text: err.message });
+      }
+    } else {
+      setPrintMsg({ kind: "info", text: "No printer connected — showing what the XP-Q807K would receive (simulated)" });
+    }
+  }
+
+  function escposHex() {
+    const bytes = Uint8Array.from(atob(done.escpos), (c) => c.charCodeAt(0));
+    return Array.from(bytes.slice(0, 320))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join(" ");
   }
 
   if (done) {
@@ -128,7 +153,23 @@ export default function Pos() {
           <div className="mt-5">
             <Receipt receipt={done.receipt} />
           </div>
-          <div className="mt-5 flex justify-center gap-3">
+          {printMsg && (
+            <div className={`mt-4 rounded-lg px-4 py-2 text-left text-sm ${printMsg.kind === "error" ? "bg-red-50 text-red-700" : printMsg.kind === "success" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+              {printMsg.text}
+              {printMsg.kind === "info" && (
+                <pre className="mt-2 overflow-x-auto rounded bg-white p-2 font-mono text-[10px] leading-snug text-slate-500">
+                  {escposHex()}
+                </pre>
+              )}
+            </div>
+          )}
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <button
+              onClick={printReceipt}
+              className="rounded-lg bg-slate-900 px-5 py-2.5 font-semibold text-white hover:bg-slate-800"
+            >
+              Print receipt
+            </button>
             <button
               onClick={newSale}
               className="rounded-lg bg-emerald-600 px-5 py-2.5 font-semibold text-white hover:bg-emerald-700"
