@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  fs.chmodSync(DATA_DIR, 0o700);
+} catch {}
 
 const db = new Database(path.join(DATA_DIR, "pos.db"));
 db.pragma("journal_mode = WAL");
@@ -150,6 +153,22 @@ const MIGRATIONS = [
       `);
       db.exec(`DROP INDEX IF EXISTS idx_products_category`);
       db.exec(`ALTER TABLE products DROP COLUMN category`);
+    },
+  },
+  {
+    version: 4,
+    migrate() {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          token_id TEXT NOT NULL UNIQUE,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          expires_at TEXT NOT NULL,
+          revoked_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_id);
+      `);
     },
   },
 ];

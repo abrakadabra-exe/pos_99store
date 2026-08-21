@@ -178,6 +178,27 @@ and uploads it somewhere off the VPS. Restoring is copying
 single source of truth; the JSONL files are a belt-and-suspenders
 record of every change.
 
+## Security
+
+- **PINs** are hashed with scrypt (N=16384, r=8, p=1) and a random
+  salt; verification uses a constant-time comparison.
+- **Login and PIN recovery are rate-limited**: after 5 failed
+  logins (3 recovery attempts) per account + IP, further attempts
+  return `429` for 15 minutes.
+- **Sessions are revocable**: every login creates a server-side
+  session record. Logging out revokes it, and a deactivated account
+  loses access immediately — no need to wait for the 30-day token
+  to expire. This also means everyone must log in again after an
+  upgrade to a version that adds sessions.
+- **JWT signing key**: generated on first run and stored in
+  `server/data/session-secret` (mode 0600). Set the `JWT_SECRET`
+  environment variable to pin your own key. Admins can rotate the
+  key and revoke every session from Settings-independent API call
+  (`POST /api/auth/rotate-secret`).
+- **SQL injection**: all queries are parameterized.
+- Rate limiting keys on the client IP; keep the app behind a single
+  reverse proxy (Caddy is documented below) so the real IP is seen.
+
 ## CSV/Excel import format
 
 The file must have exactly these columns, in any order:

@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import db from "./db.js";
+import db, { DATA_DIR } from "./db.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BACKUP_DIR = path.join(__dirname, "..", "data", "backups");
+const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // rotate at 5MB
 
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
+try {
+  fs.chmodSync(BACKUP_DIR, 0o700);
+} catch {}
 
 let seq = 0;
 let currentFile = null;
@@ -42,6 +43,9 @@ const localTarget = {
   push(entry) {
     rotateIfNeeded();
     fs.appendFileSync(currentFile, JSON.stringify(entry) + "\n", "utf8");
+    try {
+      fs.chmodSync(currentFile, 0o600);
+    } catch {}
   },
 };
 

@@ -19,6 +19,9 @@ export const REQUIRED_COLUMNS = [
   "low_stock_threshold",
 ];
 
+const MAX_IMPORT_ROWS = 5000;
+const MAX_IMPORT_BYTES = 12 * 1024 * 1024;
+
 const router = Router();
 router.use(requireAuth);
 
@@ -388,12 +391,18 @@ router.post("/import", (req, res, next) => {
     if (/\.(xlsx|xls)$/i.test(name)) {
       const data = String(req.body.data || "");
       if (!data) return res.status(400).json({ error: "Empty Excel file" });
+      if (data.length > MAX_IMPORT_BYTES) {
+        return res.status(400).json({ error: `Excel file too large (max 8 MB)` });
+      }
       const wb = XLSX.read(data, { type: "base64" });
       if (!wb.SheetNames.length) return res.status(400).json({ error: "Excel file has no sheets" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const all = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
       if (all.length < 2) {
         return res.status(400).json({ error: "File needs a header row and at least one data row" });
+      }
+      if (all.length - 1 > MAX_IMPORT_ROWS) {
+        return res.status(400).json({ error: `Too many rows (max ${MAX_IMPORT_ROWS})` });
       }
       const header = all[0].map((h) => cellToText(h));
       const result = applyImport(header, excelRows(wb), req.user.id);
@@ -403,8 +412,14 @@ router.post("/import", (req, res, next) => {
 
     const text = String(req.body.csv || "").replace(/^\uFEFF/, "");
     if (!text.trim()) return res.status(400).json({ error: "Empty CSV" });
+    if (text.length > MAX_IMPORT_BYTES) {
+      return res.status(400).json({ error: "CSV file too large (max 8 MB)" });
+    }
     const rows = parseCsv(text);
     if (rows.length < 2) return res.status(400).json({ error: "CSV needs a header row and at least one data row" });
+    if (rows.length - 1 > MAX_IMPORT_ROWS) {
+      return res.status(400).json({ error: `Too many rows (max ${MAX_IMPORT_ROWS})` });
+    }
 
     const header = rows[0].map((h) => h.trim());
     const result = applyImport(header, rows.slice(1), req.user.id);

@@ -1,4 +1,5 @@
 import express from "express";
+import helmet from "helmet";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,46 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
 const app = express();
 
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        "img-src": ["'self'", "data:", "blob:"],
+        "connect-src": ["'self'"],
+        "upgrade-insecure-requests": null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+function originCheck(req, res, next) {
+  const origin = req.headers.origin;
+  if (!origin) return next();
+  let originHost;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return res.status(400).json({ error: "Invalid Origin header" });
+  }
+  if (originHost !== req.headers.host) {
+    return res.status(403).json({ error: "Cross-origin requests are not allowed" });
+  }
+  next();
+}
+
+function httpsRedirect(req, res, next) {
+  if (req.headers["x-forwarded-proto"] === "http" && (req.method === "GET" || req.method === "HEAD")) {
+    return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
+  }
+  next();
+}
+
+app.use(originCheck);
+app.use(httpsRedirect);
 app.use(express.json({ limit: "20mb" }));
 
 app.get("/api/health", (req, res) => {

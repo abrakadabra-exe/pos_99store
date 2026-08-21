@@ -30,6 +30,7 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    api("/auth/logout", { method: "POST" }).catch(() => {});
     setToken(null);
     setUser(null);
   }

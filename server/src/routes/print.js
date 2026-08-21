@@ -8,6 +8,8 @@ import { buildLabel, tsplBytes } from "../label.js";
 const router = Router();
 router.use(requireAuth);
 
+const MAX_PRINT_BYTES = 128 * 1024;
+
 const TEST_SALE = {
   invoice_no: "TEST-0001",
   created_at: new Date().toISOString().replace("T", " ").slice(0, 19),
@@ -64,6 +66,9 @@ router.post("/:kind", async (req, res, next) => {
   const kind = req.params.kind === "label" ? "label" : "receipt";
   const data = String(req.body.data || "");
   if (!data) return res.status(400).json({ error: "No data to print" });
+  if (data.length > MAX_PRINT_BYTES) {
+    return res.status(400).json({ error: "Print payload too large" });
+  }
   const device = findPrinterDevice(kind);
   if (!device) {
     return res.status(503).json({
