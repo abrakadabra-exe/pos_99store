@@ -1,11 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import db from "./db.js";
+import { DATA_DIR } from "./db.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, "..", "data");
 const SECRET_FILE = path.join(DATA_DIR, "session-secret");
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
